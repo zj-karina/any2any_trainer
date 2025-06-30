@@ -1,0 +1,55 @@
+# Simplified configuration with direct use of HuggingFace models
+# Following align-anything approach
+
+# === BASIC PARAMETERS ===
+model_name_or_path: "Qwen/Qwen2.5-7B-Instruct"
+model_type: "text_only"  # Simple text model to start with
+
+# === DATASET ===
+dataset:
+  - "tatsu-lab/alpaca"  # Simple text dataset
+
+conversation_field: "conversations"
+max_seq_length: 2048
+
+# === TRAINING PARAMETERS ===
+output_dir: "./output/simple_hf_model"
+per_device_train_batch_size: 2
+per_device_eval_batch_size: 2
+gradient_accumulation_steps: 4
+num_train_epochs: 1
+learning_rate: 5e-5
+warmup_steps: 100
+logging_steps: 10
+save_steps: 500
+eval_steps: 500
+save_total_limit: 3
+
+# === PEFT/LoRA ===
+use_peft: true
+lora:
+  r: 64
+  alpha: 128
+  dropout: 0.1
+  target_modules:
+    - "q_proj"
+    - "v_proj"
+    - "k_proj"
+    - "o_proj"
+    - "gate_proj"
+    - "up_proj"
+    - "down_proj"
+  bias: "none"
+
+# === OPTIMIZATION ===
+gradient_checkpointing: true
+bf16: true
+dataloader_num_workers: 4
+remove_unused_columns: false
+
+# === LOGGING ===
+report_to: "none"
+run_name: "simple_hf_training"
+
+# === OTHER ===
+seed: 42 

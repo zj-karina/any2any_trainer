@@ -1,0 +1,148 @@
+# Configuration for training AnyGPT-style model (any modality → any modality)
+
+# Basic model parameters
+model_name_or_path: "Qwen/Qwen2.5-7B-Instruct"
+model_type: "any2any"  # multimodal, any2any, unified
+
+# Modality configuration
+modalities:
+  input: ["text", "image", "audio", "video"]
+  output: ["text", "image", "audio"]
+
+# Encoders for each modality
+encoders:
+  text:
+    model: "Qwen/Qwen2.5-7B-Instruct"
+    freeze: false
+    tokenizer_type: "continuous"
+  image:
+    model: "openai/clip-vit-large-patch14"
+    freeze: true
+    tokenizer_type: "discrete"
+    processor_kwargs:
+      do_rescale: true
+      do_normalize: true
+  audio:
+    model: "openai/whisper-base"
+    freeze: true
+    tokenizer_type: "discrete"
+    processor_kwargs:
+      sampling_rate: 16000
+  video:
+    model: "microsoft/videoMAE-base"
+    freeze: true
+    tokenizer_type: "discrete"
+    processor_kwargs:
+      num_frames: 16
+
+# Decoders for output modalities
+decoders:
+  image:
+    model: "CompVis/stable-diffusion-v1-4"
+    freeze: true
+    tokenizer_type: "discrete"
+  audio:
+    model: "microsoft/speecht5_tts"
+    freeze: true
+    tokenizer_type: "discrete"
+
+# Projection layers
+projection:
+  type: "transformer"  # mlp, linear, transformer
+  hidden_size: 4096
+  num_layers: 4
+  dropout: 0.1
+
+# Special tokens for modalities
+special_tokens:
+  image_start: "<img>"
+  image_end: "</img>"
+  audio_start: "<aud>"
+  audio_end: "</aud>"
+  video_start: "<vid>"
+  video_end: "</vid>"
+
+# Dataset configuration
+dataset:
+  - "custom/multimodal_conversations"
+  # Can add multiple datasets
+  # - "another/dataset"
+
+conversation_field: "conversations"
+max_seq_length: 4096
+
+# Training parameters
+output_dir: "./output/anygpt_style_model"
+per_device_train_batch_size: 1
+per_device_eval_batch_size: 1
+gradient_accumulation_steps: 16
+num_train_epochs: 2
+learning_rate: 1e-5
+warmup_steps: 50
+logging_steps: 5
+save_steps: 200
+eval_steps: 200
+save_total_limit: 2
+
+# LoRA configuration
+use_peft: true
+lora:
+  r: 128
+  alpha: 256
+  dropout: 0.1
+  target_modules:
+    - "q_proj"
+    - "v_proj"
+    - "k_proj"
+    - "o_proj"
+    - "gate_proj"
+    - "up_proj"
+    - "down_proj"
+  bias: "none"
+
+# Component freezing
+freeze_vision_encoder: true
+freeze_audio_encoder: true
+freeze_llm: false
+train_projection_only: false
+
+# Patterns for unfreezing specific layers
+unfreeze_layers_patterns:
+  - "layers.30"  # Unfreeze last layers
+  - "layers.31"
+
+# Additional parameters
+gradient_checkpointing: true
+bf16: true
+fp16: false
+dataloader_num_workers: 2
+remove_unused_columns: false
+
+# Logging
+report_to: "wandb"  # none, wandb, clearml, tensorboard
+run_name: "anygpt_style_any2any_training"
+
+# Generate examples during validation
+generate_eval_examples: false  # Disabled to save time
+max_new_tokens: 512
+
+# Seed for reproducibility
+seed: 42
+
+# Additional parameters for any2any
+any2any_config:
+  # Loss weights for different modalities
+  modality_loss_weights:
+    text: 1.0
+    image: 0.5
+    audio: 0.5
+  
+  # Maximum sequence length for each modality
+  modality_max_lengths:
+    text: 2048
+    image: 256
+    audio: 512
+    video: 128
+  
+  # Use special separator tokens
+  use_modality_separators: true 

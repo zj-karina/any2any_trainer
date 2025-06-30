@@ -1,0 +1,90 @@
+[tool.poetry]
+name = "any2any-trainer"
+version = "0.1.0"
+description = "Universal Multimodal Training Toolkit for Any-to-Any Models"
+authors = ["Your Name <your.email@example.com>"]
+readme = "README.md"
+packages = [{include = "any2any_trainer", from = "src"}]
+
+[tool.poetry.dependencies]
+python = "^3.10"
+torch = "^2.0.0"
+transformers = "^4.35.0"
+accelerate = "^0.24.0"
+datasets = "^2.14.0"
+evaluate = "^0.4.0"
+peft = "^0.6.0"
+bitsandbytes = "^0.41.0"
+deepspeed = "^0.12.0"
+wandb = "^0.16.0"
+clearml = "^1.13.0"
+tensorboard = "^2.14.0"
+pillow = "^10.0.0"
+librosa = "^0.10.0"
+opencv-python = "^4.8.0"
+torchaudio = "^2.0.0"
+torchvision = "^0.15.0"
+omegaconf = "^2.3.0"
+hydra-core = "^1.3.0"
+timm = "^0.9.0"
+scikit-learn = "^1.3.0"
+numpy = "^1.24.0"
+pandas = "^2.0.0"
+tqdm = "^4.65.0"
+rich = "^13.5.0"
+typer = "^0.9.0"
+pydantic = "^2.4.0"
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^7.4.0"
+black = "^23.0.0"
+isort = "^5.12.0"
+flake8 = "^6.0.0"
+mypy = "^1.5.0"
+pre-commit = "^3.4.0"
+jupyter = "^1.0.0"
+
+[tool.poetry.group.optional.dependencies]
+flash-attn = "^2.3.0"
+xformers = "^0.0.22"
+vllm = "^0.2.0"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.black]
+line-length = 88
+target-version = ['py310']
+include = '\.pyi?$'
+extend-exclude = '''
+/(
+  # directories
+  \.eggs
+  | \.git
+  | \.hg
+  | \.mypy_cache
+  | \.tox
+  | \.venv
+  | build
+  | dist
+)/
+'''
+
+[tool.isort]
+profile = "black"
+multi_line_output = 3
+line_length = 88
+known_first_party = ["any2any_trainer"]
+
+[tool.mypy]
+python_version = "3.10"
+warn_return_any = true
+warn_unused_configs = true
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"] 

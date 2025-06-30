@@ -1,0 +1,34 @@
+# Minimal Test Configuration
+# Simple config to test the library works out of the box
+
+model_name: "gpt2"  # Small model for quick testing
+output_dir: "outputs/test_run"
+dataset: ["wikitext", "wikitext-2-raw-v1"]  # Small public dataset
+
+# Training parameters
+learning_rate: 5.0e-5
+max_epochs: 1
+batch_size: 2
+max_seq_length: 512
+save_steps: 50
+eval_steps: 50
+logging_steps: 10
+
+# Memory optimization
+use_peft: true
+lora_r: 8
+lora_alpha: 32
+lora_dropout: 0.1
+
+# Resource settings
+fp16: true
+dataloader_num_workers: 0
+remove_unused_columns: false
+
+# Simple text processing
+max_new_tokens: 50
+generate_eval_examples: true
+
+# Disable complex features for basic test
+use_accelerate: false
+use_deepspeed: false 
