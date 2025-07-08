@@ -69,7 +69,18 @@ class ModelFactory:
         """Load vision encoder."""
         logger.info(f"👁️ Loading vision encoder: {model_name}")
         
-        model = AutoModel.from_pretrained(model_name, trust_remote_code=True)
+        try:
+            # Try loading with safetensors first to avoid torch.load security issues
+            model = AutoModel.from_pretrained(
+                model_name, 
+                trust_remote_code=True,
+                use_safetensors=True  # Force safetensors usage
+            )
+        except Exception as e:
+            logger.warning(f"⚠️ Failed to load with safetensors, trying default: {e}")
+            # Fallback to default loading
+            model = AutoModel.from_pretrained(model_name, trust_remote_code=True)
+        
         processor = AutoProcessor.from_pretrained(model_name, trust_remote_code=True)
         
         return {
@@ -83,7 +94,18 @@ class ModelFactory:
         """Load audio encoder."""
         logger.info(f"🎵 Loading audio encoder: {model_name}")
         
-        model = AutoModel.from_pretrained(model_name, trust_remote_code=True)
+        try:
+            # Try loading with safetensors first to avoid torch.load security issues
+            model = AutoModel.from_pretrained(
+                model_name, 
+                trust_remote_code=True,
+                use_safetensors=True  # Force safetensors usage
+            )
+        except Exception as e:
+            logger.warning(f"⚠️ Failed to load with safetensors, trying default: {e}")
+            # Fallback to default loading
+            model = AutoModel.from_pretrained(model_name, trust_remote_code=True)
+        
         processor = AutoProcessor.from_pretrained(model_name, trust_remote_code=True)
         
         return {
@@ -112,6 +134,29 @@ class ModelFactory:
         model = get_peft_model(model, lora_config)
         model.print_trainable_parameters()
         
+        # Explicitly enable gradients for LoRA parameters
+        trainable_count = 0
+        for name, param in model.named_parameters():
+            if param.requires_grad:
+                trainable_count += 1
+                if trainable_count <= 5:  # Log first 5 only
+                    logger.info(f"✅ Trainable parameter: {name}")
+        
+        logger.info(f"📊 Total trainable parameters: {trainable_count}")
+        
+        # Force enable training mode and ensure LoRA is active
+        model.train()
+        
+        # Double-check LoRA is working
+        if hasattr(model, 'peft_config'):
+            logger.info("✅ PEFT/LoRA is active")
+        
+        # Force gradients on
+        for name, param in model.named_parameters():
+            if 'lora' in name.lower() or 'adapters' in name.lower():
+                param.requires_grad_(True)
+                logger.debug(f"🔧 Forced gradients for LoRA param: {name}")
+        
         return model
     
     @staticmethod
@@ -129,6 +174,21 @@ class ModelFactory:
                 if pattern in name:
                     param.requires_grad = True
                     logger.info(f"🔓 Unfrozen layer: {name}")
+        
+        # Log trainable parameters
+        trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
+        total_params = sum(p.numel() for p in model.parameters())
+        logger.info(f"🎯 Trainable params: {trainable_params:,} / {total_params:,} ({100 * trainable_params / total_params:.2f}%)")
+        
+        # Ensure we have at least some trainable parameters
+        if trainable_params == 0:
+            logger.warning("⚠️ No trainable parameters found! This will cause training errors.")
+            # Force enable some parameters for LoRA
+            if hasattr(model, 'base_model'):
+                for name, param in model.base_model.named_parameters():
+                    if 'lora' in name.lower():
+                        param.requires_grad = True
+                        break
 
 
 def load_model(config: TrainingConfig) -> nn.Module:
@@ -147,8 +207,22 @@ def load_model(config: TrainingConfig) -> nn.Module:
         from .any2any import AnyToAnyModel  
         return AnyToAnyModel.from_config(config)
     
+    elif config.model_type == "standard" or config.model_type == "auto":
+        # Standard HuggingFace model loading
+        logger.info("📚 Loading standard HuggingFace model...")
+        model = ModelFactory.load_base_model(config)
+        
+        # Set up PEFT
+        model = ModelFactory.setup_peft(model, config)
+        
+        # Freeze parameters
+        ModelFactory.freeze_parameters(model, config)
+        
+        return model
+    
     else:
-        # Simple loading of regular LLM
+        # Fallback for unknown types - treat as standard
+        logger.warning(f"⚠️ Unknown model type '{config.model_type}', treating as standard")
         model = ModelFactory.load_base_model(config)
         
         # Set up PEFT

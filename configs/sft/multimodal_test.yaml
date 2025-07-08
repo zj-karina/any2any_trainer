@@ -1,0 +1,57 @@
+# Simple multimodal training test configuration
+model_name_or_path: "microsoft/DialoGPT-small"  # Small model for testing
+model_type: "multimodal"
+
+# Multimodal configuration
+modalities:
+  input: ["image", "text"]
+  output: ["text"]
+
+# Vision encoder
+encoders:
+  image:
+    model: "openai/clip-vit-base-patch32"
+    freeze: true
+    tokenizer_type: "continuous"
+
+# Projection layer
+projection:
+  type: "mlp"
+  hidden_size: 768  # Match DialoGPT-small
+  num_layers: 2
+
+# Dataset with multimodal conversations
+# Dataset: Convert LLaVA first using scripts/convert_llava_to_conversations.py  
+# dataset: ["converted_llava_instruct_150k.jsonl"]  # Path to converted dataset
+dataset: ["wikitext", "wikitext-2-raw-v1"]  # Fallback for testing
+
+# Data configuration
+conversation_field: "conversations"
+max_seq_length: 512  # Shorter for testing
+
+# Training parameters
+output_dir: "./test_multimodal_model"
+per_device_train_batch_size: 1
+per_device_eval_batch_size: 1
+num_train_epochs: 1
+learning_rate: 5e-5
+
+# LoRA configuration
+use_peft: true
+lora:
+  r: 16
+  alpha: 32
+  target_modules: ["q_proj", "v_proj"]
+
+# Training settings
+gradient_checkpointing: false
+bf16: true
+save_steps: 1000
+logging_steps: 5
+dataloader_num_workers: 1
+remove_unused_columns: false
+report_to: "none"
+
+# Generate examples during eval
+generate_eval_examples: false  # Disable for faster testing
+max_new_tokens: 64 

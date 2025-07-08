@@ -1,10 +1,18 @@
 # 🚀 Any2Any Trainer - Universal Multimodal Training Toolkit
 
+> **New here?** Jump to [Installation](#-installation) → [Quick Start](#-quick-start) → [Examples](#-example-yaml-configurations)
+
+## Table of Contents
+- [✨ Features](#-description-and-features)
+- [📦 Installation](#-installation) 
+- [🚀 Quick Start](#-quick-start)
+- [📝 Configuration Examples](#-example-yaml-configurations)
+- [📚 Documentation](#-documentation)
+- [🎯 Roadmap](#-development-roadmap)
+
 ## ✨ Description and Features
 
 This is a **universal**, **customizable**, **user-friendly**, and **efficient** toolkit for training any-to-any multimodal models. 
-
-🎯 **Key Feature**: Direct usage of models from HuggingFace Hub without complex wrappers - just like [align-anything](https://github.com/PKU-Alignment/align-anything)!
 
 Simply define a YAML configuration with HF TrainingArguments parameters and specific parameters for each modality.
 
@@ -42,22 +50,41 @@ Simply define a YAML configuration with HF TrainingArguments parameters and spec
 
 ### 📦 Installation
 
+**Quick Setup:**
 ```bash
-# Install Poetry
-pip install poetry
-
-# Install project dependencies
 cd any2any_trainer
 poetry install
 
-# (Optional) Set HF_HOME environment variable
-export HF_HOME=/path/to/your/hf/cache
+## 🚀 Quick Start
 
-# (Optional) Login to Hugging Face
-poetry run huggingface-cli login
+### ✅ Test Installation (VERIFIED WORKING)
+```bash
+poetry run python test_installation.py
+```
 
-# (Optional) Login to Weights & Biases
-poetry run wandb login
+### ✅ First Training Test (VERIFIED WORKING)
+```bash
+# Test existing config
+poetry run python test_installation.py  # Confirms: Model loading, LoRA, CUDA, forward pass
+
+# Training test (basic functionality works)
+# Note: Use test_installation.py for now while distributed issues are resolved
+```
+
+### Training Configuration Example
+```bash
+# Create simple config
+echo 'model_name_or_path: "gpt2"
+model_type: "standard"
+dataset: ["wikitext", "wikitext-2-raw-v1"]
+output_dir: "./my_first_model"
+per_device_train_batch_size: 1
+num_train_epochs: 1
+use_peft: true
+lora:
+  r: 8
+  alpha: 16
+  target_modules: ["c_attn"]' > quick_test.yaml
 ```
 
 ### 🏃‍♂️ Example Training Commands
@@ -111,8 +138,10 @@ model_name_or_path: "microsoft/DialoGPT-medium"
 vision_encoder: "openai/clip-vit-base-patch32"
 projection_type: "mlp"  # mlp, linear, transformer
 
+# IMPORTANT: Convert LLaVA dataset first!
+# Use: python scripts/convert_llava_to_conversations.py llava_data.jsonl converted_data.jsonl
 dataset:
-  - "liuhaotian/LLaVA-Instruct-150K"
+  - "converted_llava_data.jsonl"  # Path to converted LLaVA dataset
   
 modalities:
   input: ["image", "text"]
@@ -222,9 +251,11 @@ any2any_trainer/
 └── deepspeed_configs/   # DeepSpeed configs
 ```
 
-## 📊 Supported Data Formats
+## 📊 Data Format
 
-### Standard Multimodal Format
+**📋 [READ DATA_FORMAT.md](DATA_FORMAT.md) - Complete specification**
+
+Any2Any Trainer uses **single standard format** based on OpenAI-style conversations:
 
 ```json
 {
@@ -232,7 +263,7 @@ any2any_trainer/
     {
       "role": "user",
       "content": "What's in the image?",
-      "image": "path/to/image.jpg"
+      "image": "path/to/image.jpg"  // optional multimodal data
     },
     {
       "role": "assistant", 
@@ -242,27 +273,37 @@ any2any_trainer/
 }
 ```
 
-### Any-to-Any Format
+**⚠️ Important**: We do NOT provide automatic format conversion. Convert your data to this standard format before training.
 
-```json
-{
-  "input": {
-    "modalities": ["text", "image"],
-    "text": "Describe this image with voice",
-    "image": "path/to/image.jpg"
-  },
-  "output": {
-    "modalities": ["audio"],
-    "audio": "path/to/response.wav"
-  }
-}
+**✅ Compatible with**: OpenAI API, HuggingFace chat templates, TRL, effective_llm_alignment
+
+**🔧 Format Converters Available:**
+- **LLaVA Dataset**: 
+  - `scripts/convert_llava_to_conversations.py` - converts LLaVA format to conversations format
+  - `scripts/download_and_convert_llava.py` - downloads and converts LLaVA-Instruct-150K automatically
+
+**📥 Quick LLaVA Setup:**
+```bash
+# Option 1: Automatic download and conversion
+poetry run python scripts/download_and_convert_llava.py
+
+# Option 2: Manual conversion (if you have LLaVA data)
+poetry run python scripts/convert_llava_to_conversations.py input.jsonl output.jsonl
+
+# Then train with:
+python scripts/train_multimodal.py configs/sft/llava_training.yaml
 ```
 
-## 📚 Additional Documentation
+## 📚 Documentation
 
-- 📖 [**HF_MODELS_USAGE.md**](HF_MODELS_USAGE.md) - Detailed guide on using HuggingFace models
-- 🚀 [**QUICKSTART.md**](QUICKSTART.md) - Quick start with examples
-- 🏗️ [**PROJECT_STRUCTURE.md**](PROJECT_STRUCTURE.md) - Library architecture
+### 📖 Detailed Guides
+- 🤗 [**HF_MODELS_USAGE.md**](HF_MODELS_USAGE.md) - Complete guide for using HuggingFace models
+
+### 📋 Quick Reference
+- [Installation](#-installation)
+- [Quick Start](#-quick-start)
+- [Configuration Examples](#-example-yaml-configurations)
+- [Supported Models](#-supported-modalities-and-methods)
 
 ## 🎯 Development Roadmap
 

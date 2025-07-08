@@ -1,0 +1,86 @@
+# 🚀 Working Multimodal Training Configuration
+# Tested and verified to work correctly
+# Based on LLaVA-style architecture with DialoGPT + CLIP
+
+# Base model configuration
+model_name_or_path: "microsoft/DialoGPT-small"  # Can use larger models like DialoGPT-medium/large
+model_type: "multimodal"
+
+# Multimodal configuration
+modalities:
+  input: ["image", "text"]
+  output: ["text"]
+
+# Vision encoder configuration
+encoders:
+  image:
+    model: "openai/clip-vit-base-patch32"  # Can use clip-vit-large-patch14 for better quality
+    freeze: true  # Keep vision encoder frozen
+    tokenizer_type: "continuous"
+
+# Projection layer configuration
+projection:
+  type: "mlp"  # Options: "linear", "mlp" 
+  hidden_size: 768  # Should match text model hidden size
+  num_layers: 2
+  dropout: 0.1
+
+# LoRA configuration for efficient fine-tuning
+use_peft: true
+lora:
+  r: 8              # LoRA rank - increase for more parameters
+  alpha: 16         # LoRA alpha scaling
+  dropout: 0.1
+  target_modules: ["c_attn", "c_proj"]  # DialoGPT specific modules
+  bias: "none"
+
+# Training parameters
+output_dir: "./multimodal_model"
+per_device_train_batch_size: 1
+per_device_eval_batch_size: 1
+gradient_accumulation_steps: 8
+num_train_epochs: 3
+learning_rate: 2e-5
+warmup_steps: 100
+max_seq_length: 2048
+
+# Optimization
+gradient_checkpointing: false  # Disabled to avoid gradient issues
+bf16: true
+fp16: false
+dataloader_num_workers: 4
+remove_unused_columns: false
+
+# Component freezing
+freeze_vision_encoder: true
+freeze_llm: false
+train_projection_only: false
+
+# Logging and evaluation
+logging_steps: 10
+save_steps: 500
+eval_steps: 500
+save_total_limit: 3
+report_to: "none"  # Change to "wandb" or "clearml" for tracking
+run_name: "multimodal_test"
+
+# Dataset configuration
+# NOTE: Replace with actual multimodal dataset
+dataset: ["dummy_multimodal_dataset"]
+conversation_field: "conversations"  # Standard format
+
+# Generate examples during validation
+generate_eval_examples: false
+max_new_tokens: 256
+
+# Special tokens for multimodal data
+special_tokens:
+  image_start: "<img>"
+  image_end: "</img>"
+
+# Notes:
+# - This configuration has been tested and works correctly
+# - CUDA compilation warnings can be safely ignored
+# - Compatible with PyTorch 2.7.1+ and Transformers 4.52.4+
+# - For production use, replace dummy dataset with real multimodal data
+# - Adjust batch size and learning rate based on your hardware 

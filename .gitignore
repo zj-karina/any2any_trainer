@@ -199,3 +199,11 @@ accelerate_configs/
 # CUDA
 *.cu
 *.cuh 
+
+hub/
+hub/llava_instruct_150k_original_temp.json
+hub/my_first_model/
+hub/stored_tokens
+hub/token
+stored_tokens
+token

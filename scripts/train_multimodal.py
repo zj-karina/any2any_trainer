@@ -92,6 +92,11 @@ def main():
         logger.info("📥 Loading model...")
         model = load_model(config)
         logger.info("✅ Model loaded successfully")
+        
+        # Load tokenizer for data processing
+        from any2any_trainer.models.factory import ModelFactory
+        tokenizer = ModelFactory.load_tokenizer(config)
+        logger.info("✅ Tokenizer loaded successfully")
     except Exception as e:
         logger.error(f"❌ Model loading error: {e}")
         return 1
@@ -109,7 +114,7 @@ def main():
     
     # Create data collator
     try:
-        data_collator = MultimodalCollator(config)
+        data_collator = MultimodalCollator(config, tokenizer=tokenizer)
         logger.info("✅ Data collator created")
     except Exception as e:
         logger.error(f"❌ Data collator creation error: {e}")

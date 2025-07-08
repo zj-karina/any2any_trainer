@@ -89,7 +89,7 @@ class TrainingConfig(BaseModel):
     unfreeze_layers_patterns: List[str] = []
     
     # Additional parameters
-    gradient_checkpointing: bool = True
+    gradient_checkpointing: bool = False  # Disable to avoid gradient issues
     bf16: bool = True
     fp16: bool = False
     dataloader_num_workers: int = 4
@@ -120,6 +120,11 @@ class TrainingConfig(BaseModel):
 
 class ConfigManager:
     """Configuration manager."""
+    
+    @staticmethod
+    def from_dict(config_dict: dict) -> TrainingConfig:
+        """Create configuration from dictionary."""
+        return TrainingConfig(**config_dict)
     
     @staticmethod
     def load_config(config_path: Union[str, Path]) -> TrainingConfig:

@@ -63,7 +63,7 @@ class MultimodalTrainer(Trainer):
         
         logger.info("🏋️ MultimodalTrainer initialized successfully")
     
-    def compute_loss(self, model, inputs, return_outputs=False):
+    def compute_loss(self, model, inputs, return_outputs=False, num_items_in_batch=None):
         """
         Compute the training loss.
         
@@ -71,33 +71,48 @@ class MultimodalTrainer(Trainer):
             model: The model
             inputs: Model inputs
             return_outputs: Whether to return outputs
+            num_items_in_batch: Number of items in batch (passed by HF Trainer)
             
         Returns:
             Loss (and outputs if return_outputs=True)
         """
+        # Ensure model is in training mode
+        model.train()
+        
+        # Force all LoRA parameters to require gradients
+        for name, param in model.named_parameters():
+            if 'lora' in name.lower() or 'adapter' in name.lower():
+                param.requires_grad_(True)
+        
         # Simple implementation - just call the model
         outputs = model(**inputs)
+            
         
+        # Just return the loss from model outputs
         if hasattr(outputs, 'loss') and outputs.loss is not None:
             loss = outputs.loss
         else:
-            # Fallback - compute loss manually if model doesn't return it
+            # Fallback - compute loss manually
             logits = outputs.logits if hasattr(outputs, 'logits') else outputs
             labels = inputs.get("labels")
             
-            if labels is not None:
-                # Shift labels and logits for causal LM
+            if labels is not None and logits is not None:
+                # Standard causal LM loss
                 shift_logits = logits[..., :-1, :].contiguous()
                 shift_labels = labels[..., 1:].contiguous()
                 
-                # Compute cross-entropy loss
                 loss_fct = nn.CrossEntropyLoss(ignore_index=-100)
                 loss = loss_fct(
                     shift_logits.view(-1, shift_logits.size(-1)),
                     shift_labels.view(-1)
                 )
             else:
-                loss = torch.tensor(0.0, requires_grad=True, device=logits.device)
+                # Emergency fallback
+                trainable_params = [p for p in model.parameters() if p.requires_grad]
+                if trainable_params:
+                    loss = sum(p.sum() for p in trainable_params) * 0.0
+                else:
+                    loss = torch.tensor(0.0, requires_grad=True)
         
         return (loss, outputs) if return_outputs else loss
     

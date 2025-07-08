@@ -1,0 +1,92 @@
+# 🚀 LLaVA-style Multimodal Training Configuration
+# Based on LLaVA-Instruct-150K dataset
+# Requires dataset conversion first!
+
+# Base model configuration
+model_name_or_path: "microsoft/DialoGPT-medium"  # Use medium for better quality
+model_type: "multimodal"
+
+# Multimodal configuration
+modalities:
+  input: ["image", "text"]
+  output: ["text"]
+
+# Vision encoder configuration  
+encoders:
+  image:
+    model: "openai/clip-vit-large-patch14"  # Use large CLIP for better vision understanding
+    freeze: true  # Keep vision encoder frozen
+    tokenizer_type: "continuous"
+
+# Projection layer configuration
+projection:
+  type: "mlp"  # MLP projection works best for LLaVA
+  hidden_size: 1024  # Match DialoGPT-medium hidden size
+  num_layers: 2
+  dropout: 0.1
+
+# LoRA configuration for efficient fine-tuning
+use_peft: true
+lora:
+  r: 16             # Increase rank for multimodal
+  alpha: 32         # LoRA alpha scaling
+  dropout: 0.1
+  target_modules: ["c_attn", "c_proj"]  # DialoGPT specific modules
+  bias: "none"
+
+# Training parameters
+output_dir: "./llava_model"
+per_device_train_batch_size: 2  # Increase if you have enough VRAM
+per_device_eval_batch_size: 2
+gradient_accumulation_steps: 8
+num_train_epochs: 3
+learning_rate: 2e-5
+warmup_steps: 500
+max_seq_length: 2048
+
+# Optimization
+gradient_checkpointing: false  # Disabled to avoid gradient issues
+bf16: true
+fp16: false
+dataloader_num_workers: 4
+remove_unused_columns: false
+
+# Component freezing
+freeze_vision_encoder: true
+freeze_llm: false
+train_projection_only: false
+
+# Logging and evaluation
+logging_steps: 50
+save_steps: 1000
+eval_steps: 1000
+save_total_limit: 3
+report_to: "none"  # Change to "wandb" for tracking
+run_name: "llava_training"
+
+# Dataset configuration
+# IMPORTANT: Convert LLaVA dataset first!
+# python scripts/convert_llava_to_conversations.py llava_instruct_150k.jsonl llava_conversations.jsonl
+dataset: ["llava_conversations.jsonl"]  # Path to converted dataset
+conversation_field: "conversations"
+
+# Generate examples during validation
+generate_eval_examples: true
+max_new_tokens: 256
+
+# Special tokens for multimodal data
+special_tokens:
+  image_start: "<img>"
+  image_end: "</img>"
+
+# Dataset preparation instructions:
+# 1. Download LLaVA-Instruct-150K from HuggingFace:
+#    from datasets import load_dataset
+#    dataset = load_dataset("liuhaotian/LLaVA-Instruct-150K")
+#    dataset['train'].to_json("llava_instruct_150k.jsonl")
+#
+# 2. Convert format:
+#    python scripts/convert_llava_to_conversations.py llava_instruct_150k.jsonl llava_conversations.jsonl
+#
+# 3. Start training:
+#    python scripts/train_multimodal.py configs/sft/llava_training.yaml 
