@@ -2,21 +2,21 @@
 # Following align-anything approach
 
 # === BASIC PARAMETERS ===
-model_name_or_path: "Qwen/Qwen2.5-7B-Instruct"
-model_type: "text_only"  # Simple text model to start with
+model_name_or_path: "Qwen/Qwen2.5-1.5B-Instruct"  # Меньшая модель, которая поместится в GPU
+model_type: "standard"  # Simple text model to start with
 
 # === DATASET ===
 dataset:
-  - "tatsu-lab/alpaca"  # Simple text dataset
+  - "HuggingFaceH4/ultrachat_200k"  # Используем default config
 
-conversation_field: "conversations"
+conversation_field: "messages"  # UltraChat использует поле 'messages'
 max_seq_length: 2048
 
 # === TRAINING PARAMETERS ===
 output_dir: "./output/simple_hf_model"
-per_device_train_batch_size: 2
-per_device_eval_batch_size: 2
-gradient_accumulation_steps: 4
+per_device_train_batch_size: 4  # Увеличиваем, так как модель меньше
+per_device_eval_batch_size: 4
+gradient_accumulation_steps: 2
 num_train_epochs: 1
 learning_rate: 5e-5
 warmup_steps: 100
@@ -28,8 +28,8 @@ save_total_limit: 3
 # === PEFT/LoRA ===
 use_peft: true
 lora:
-  r: 64
-  alpha: 128
+  r: 32  # Уменьшаем для меньшей модели
+  alpha: 64
   dropout: 0.1
   target_modules:
     - "q_proj"
@@ -42,7 +42,7 @@ lora:
   bias: "none"
 
 # === OPTIMIZATION ===
-gradient_checkpointing: true
+gradient_checkpointing: false  # Disable to avoid gradient issues
 bf16: true
 dataloader_num_workers: 4
 remove_unused_columns: false

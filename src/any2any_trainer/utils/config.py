@@ -46,12 +46,16 @@ class TrainingConfig(BaseModel):
     
     # Basic model parameters
     model_name_or_path: str
-    model_type: str = "multimodal"  # multimodal, any2any, unified
+    model_type: str = "multimodal"  # multimodal, any2any, unified, standard
     
     # Modality configuration
     modalities: Dict[str, List[str]] = {"input": ["text"], "output": ["text"]}
     encoders: Dict[str, ModalityConfig] = {}
     decoders: Dict[str, ModalityConfig] = {}
+    
+    # Vision encoder (for multimodal models)
+    vision_encoder: Optional[str] = None
+    projection_type: str = "mlp"  # mlp, linear, transformer
     
     # Projection layers
     projection: ProjectionConfig = ProjectionConfig()
@@ -62,6 +66,7 @@ class TrainingConfig(BaseModel):
     # Dataset configuration
     dataset: List[str] = []
     conversation_field: str = "conversations"
+    image_field: str = "image"
     max_seq_length: int = 2048
     
     # Training parameters (based on HF TrainingArguments)
@@ -89,11 +94,15 @@ class TrainingConfig(BaseModel):
     unfreeze_layers_patterns: List[str] = []
     
     # Additional parameters
-    gradient_checkpointing: bool = False  # Disable to avoid gradient issues
+    gradient_checkpointing: bool = False
     bf16: bool = True
     fp16: bool = False
     dataloader_num_workers: int = 4
     remove_unused_columns: bool = False
+    
+    # Evaluation settings
+    eval_during_training: bool = True
+    evaluation_strategy: str = "steps"  # no, steps, epoch
     
     # Logging
     report_to: str = "none"  # none, wandb, clearml, tensorboard
@@ -103,18 +112,25 @@ class TrainingConfig(BaseModel):
     generate_eval_examples: bool = False
     max_new_tokens: int = 256
     
+    @validator('model_type')
+    def validate_model_type(cls, v):
+        valid_types = ['standard', 'multimodal', 'any2any', 'unified']
+        if v not in valid_types:
+            raise ValueError(f"model_type must be one of: {valid_types}, got {v}")
+        return v
+
     @validator('encoders', pre=True)
     def validate_encoders(cls, v):
         if isinstance(v, dict):
             return {k: ModalityConfig(**val) if isinstance(val, dict) else val 
-                   for k, val in v.items()}
+                    for k, val in v.items()}
         return v
-    
+
     @validator('decoders', pre=True) 
     def validate_decoders(cls, v):
         if isinstance(v, dict):
-            return {k: ModalityConfig(**val) if isinstance(val, dict) else val
-                   for k, val in v.items()}
+            return {k: ModalityConfig(**val) if isinstance(val, dict) else val 
+                    for k, val in v.items()}
         return v
 
 

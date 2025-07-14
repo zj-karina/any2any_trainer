@@ -238,6 +238,10 @@ class SimpleTrainer:
         self.model.train()
         self.optimizer.zero_grad()
         
+        # Move batch to device
+        device = next(self.model.parameters()).device
+        batch = {k: v.to(device) if hasattr(v, 'to') else v for k, v in batch.items()}
+        
         outputs = self.model(**batch)
         loss = outputs.loss if hasattr(outputs, 'loss') else outputs[0]
         

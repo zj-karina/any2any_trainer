@@ -9,7 +9,7 @@ import torch.nn as nn
 from typing import Dict, Any, Optional, List
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
-from .factory import ModelFactory
+# Import will be done locally to avoid circular imports
 from ..utils.config import TrainingConfig
 from ..utils.logging import get_logger
 
@@ -74,6 +74,9 @@ class MultimodalModel(nn.Module):
     def from_config(cls, config: TrainingConfig) -> "MultimodalModel":
         """Create model from configuration."""
         logger.info("🏗️ Creating multimodal model...")
+        
+        # Import locally to avoid circular imports
+        from .factory import ModelFactory
         
         # Load base language model
         language_model = ModelFactory.load_base_model(config)

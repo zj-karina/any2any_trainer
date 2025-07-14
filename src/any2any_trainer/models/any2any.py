@@ -9,7 +9,7 @@ import torch.nn as nn
 from typing import Dict, Any, Optional, List
 from transformers import AutoModel, AutoModelForCausalLM
 
-from .factory import ModelFactory
+# Import will be done locally to avoid circular imports
 from ..utils.config import TrainingConfig
 from ..utils.logging import get_logger
 
@@ -43,6 +43,9 @@ class AnyToAnyModel(nn.Module):
     def from_config(cls, config: TrainingConfig) -> "AnyToAnyModel":
         """Create Any2Any model from configuration."""
         logger.info("🌐 Creating Any-to-Any model...")
+        
+        # Import locally to avoid circular imports
+        from .factory import ModelFactory
         
         # Load base language model
         language_model = ModelFactory.load_base_model(config)

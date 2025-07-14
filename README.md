@@ -62,13 +62,20 @@ poetry install
 poetry run python test_installation.py
 ```
 
-### ✅ First Training Test (VERIFIED WORKING)
-```bash
-# Test existing config
-poetry run python test_installation.py  # Confirms: Model loading, LoRA, CUDA, forward pass
+### ✅ Рабочие конфигурации (ПРОВЕРЕННЫЕ)
 
-# Training test (basic functionality works)
-# Note: Use test_installation.py for now while distributed issues are resolved
+| Конфигурация | Модель | Тип | Статус |
+|--------------|--------|-----|--------|
+| `minimal_working.yaml` | GPT-2 | standard | ✅ Работает |
+| `simple_hf_training.yaml` | Qwen-7B | standard | ✅ Работает |
+| `llava_training.yaml` | DialoGPT + CLIP | multimodal | ✅ Работает |
+
+```bash
+# Быстрый тест (самый простой)
+poetry run python scripts/train_multimodal.py configs/sft/minimal_working.yaml
+
+# Основной тест функциональности
+poetry run python test_installation.py  # Confirms: Model loading, LoRA, CUDA, forward pass
 ```
 
 ### Training Configuration Example
@@ -90,22 +97,14 @@ lora:
 ### 🏃‍♂️ Example Training Commands
 
 ```bash
-# 🚀 SIMPLEST way - any HuggingFace model
-PYTHONPATH="${PYTHONPATH}:src/" poetry run python \
-    scripts/train_multimodal.py \
-    configs/sft/simple_hf_training.yaml
 
-# SFT training of multimodal model
-PYTHONPATH="${PYTHONPATH}:src/" poetry run accelerate launch \
-    --config_file accelerate/fsdp_config.yaml \
-    scripts/train_multimodal.py \
-    configs/sft/hf_multimodal_training.yaml
 
-# Any-to-any model training
-PYTHONPATH="${PYTHONPATH}:src/" poetry run accelerate launch \
-    --config_file accelerate/deepspeed_config.yaml \
-    scripts/train_any2any.py \
-    configs/any2any/anygpt_style_training.yaml
+
+# Простая HuggingFace модель (Qwen + LoRA)  
+poetry run python scripts/train_multimodal.py configs/sft/simple_hf_training.yaml
+
+# Мультимодальная модель (LLaVA-style)
+poetry run python scripts/train_multimodal.py configs/sft/llava_training.yaml
 ```
 
 ### 🤗 Simple HuggingFace Model Usage
@@ -294,6 +293,12 @@ poetry run python scripts/convert_llava_to_conversations.py input.jsonl output.j
 python scripts/train_multimodal.py configs/sft/llava_training.yaml
 ```
 
+### ❌ Model Type Errors
+Убедитесь что `model_type` в YAML один из:
+- `"standard"` - обычные HuggingFace модели
+- `"multimodal"` - мультимодальные модели (LLaVA-style) 
+- `"any2any"` - any-to-any модели
+
 ## 📚 Documentation
 
 ### 📖 Detailed Guides
@@ -301,7 +306,7 @@ python scripts/train_multimodal.py configs/sft/llava_training.yaml
 
 ### 📋 Quick Reference
 - [Installation](#-installation)
-- [Quick Start](#-quick-start)
+- [Quick Start](#-quick-start) 
 - [Configuration Examples](#-example-yaml-configurations)
 - [Supported Models](#-supported-modalities-and-methods)
 

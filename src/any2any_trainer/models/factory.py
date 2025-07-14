@@ -1,234 +1,206 @@
 """
-Model factory for Any2Any Trainer.
-
-Simple approach with direct use of HuggingFace models.
+Model factory for loading different types of models.
 """
 
-from typing import Dict, Any, Optional
+import os
+import logging
 import torch
 import torch.nn as nn
+from typing import Dict, Any, Optional
 from transformers import (
-    AutoModel, 
-    AutoTokenizer,
+    AutoModelForCausalLM, 
+    AutoTokenizer, 
+    AutoImageProcessor,
     AutoProcessor,
-    AutoModelForCausalLM,
-    AutoConfig,
+    BitsAndBytesConfig
 )
-from peft import get_peft_model, LoraConfig, TaskType
 
 from ..utils.config import TrainingConfig
-from ..utils.logging import get_logger
+from .multimodal import MultimodalModel
+from .any2any import AnyToAnyModel
 
-logger = get_logger(__name__)
-
+logger = logging.getLogger(__name__)
 
 class ModelFactory:
-    """Factory for creating models."""
+    """Factory for creating different types of models."""
     
     @staticmethod
     def load_base_model(config: TrainingConfig) -> nn.Module:
-        """Load base model from HuggingFace."""
+        """Load base language model with device mapping."""
         logger.info(f"📥 Loading base model: {config.model_name_or_path}")
         
-        # Load base model
+        # Load model with auto device mapping for GPU
         model = AutoModelForCausalLM.from_pretrained(
             config.model_name_or_path,
             torch_dtype=torch.bfloat16 if config.bf16 else torch.float32,
-            device_map="auto" if torch.cuda.device_count() > 1 else None,
-            trust_remote_code=True,
+            device_map="auto",  # Automatically place on GPU
+            trust_remote_code=True
         )
+        
+        if config.gradient_checkpointing:
+            model.gradient_checkpointing_enable()
         
         return model
     
     @staticmethod
     def load_tokenizer(config: TrainingConfig) -> Any:
-        """Load tokenizer."""
-        logger.info(f"📝 Loading tokenizer: {config.model_name_or_path}")
+        """Load tokenizer for the model."""
+        logger.info(f"🔤 Loading tokenizer: {config.model_name_or_path}")
         
         tokenizer = AutoTokenizer.from_pretrained(
             config.model_name_or_path,
             trust_remote_code=True,
+            padding_side="left"
         )
         
-        # Add special tokens if they exist
-        special_tokens = []
-        for token_name, token_value in config.special_tokens.items():
-            special_tokens.append(token_value)
-        
-        if special_tokens:
-            tokenizer.add_special_tokens({"additional_special_tokens": special_tokens})
-        
-        # Set pad token if it doesn't exist
+        # Add special tokens if needed
         if tokenizer.pad_token is None:
             tokenizer.pad_token = tokenizer.eos_token
-            
+        
+        # Add custom special tokens
+        if config.special_tokens:
+            special_tokens_dict = {"additional_special_tokens": list(config.special_tokens.values())}
+            tokenizer.add_special_tokens(special_tokens_dict)
+        
         return tokenizer
     
     @staticmethod
     def load_vision_encoder(model_name: str) -> Dict[str, Any]:
-        """Load vision encoder."""
+        """Load vision encoder and processor."""
         logger.info(f"👁️ Loading vision encoder: {model_name}")
         
         try:
-            # Try loading with safetensors first to avoid torch.load security issues
-            model = AutoModel.from_pretrained(
-                model_name, 
-                trust_remote_code=True,
-                use_safetensors=True  # Force safetensors usage
-            )
+            from transformers import CLIPVisionModel
+            model = CLIPVisionModel.from_pretrained(model_name)
+            processor = AutoImageProcessor.from_pretrained(model_name)
+            
+            return {
+                "model": model,
+                "processor": processor,
+                "hidden_size": model.config.hidden_size
+            }
         except Exception as e:
-            logger.warning(f"⚠️ Failed to load with safetensors, trying default: {e}")
-            # Fallback to default loading
-            model = AutoModel.from_pretrained(model_name, trust_remote_code=True)
-        
-        processor = AutoProcessor.from_pretrained(model_name, trust_remote_code=True)
-        
-        return {
-            "model": model.vision_model if hasattr(model, 'vision_model') else model,
-            "processor": processor,
-            "config": model.config,
-        }
+            logger.error(f"Failed to load vision encoder: {e}")
+            raise
     
     @staticmethod
     def load_audio_encoder(model_name: str) -> Dict[str, Any]:
-        """Load audio encoder."""
+        """Load audio encoder and processor."""
         logger.info(f"🎵 Loading audio encoder: {model_name}")
         
         try:
-            # Try loading with safetensors first to avoid torch.load security issues
-            model = AutoModel.from_pretrained(
-                model_name, 
-                trust_remote_code=True,
-                use_safetensors=True  # Force safetensors usage
-            )
+            from transformers import WhisperModel
+            model = WhisperModel.from_pretrained(model_name)
+            processor = AutoProcessor.from_pretrained(model_name)
+            
+            return {
+                "model": model.encoder,  # Use only encoder part
+                "processor": processor,
+                "hidden_size": model.config.d_model
+            }
         except Exception as e:
-            logger.warning(f"⚠️ Failed to load with safetensors, trying default: {e}")
-            # Fallback to default loading
-            model = AutoModel.from_pretrained(model_name, trust_remote_code=True)
-        
-        processor = AutoProcessor.from_pretrained(model_name, trust_remote_code=True)
-        
-        return {
-            "model": model.encoder if hasattr(model, 'encoder') else model,
-            "processor": processor,
-            "config": model.config,
-        }
+            logger.error(f"Failed to load audio encoder: {e}")
+            raise
     
     @staticmethod
     def setup_peft(model: nn.Module, config: TrainingConfig) -> nn.Module:
-        """Set up PEFT (LoRA) for the model."""
+        """Setup PEFT (LoRA) for the model with fallback to full training."""
         if not config.use_peft:
+            logger.info("📚 Using full model training (PEFT disabled)")
             return model
-            
+        
         logger.info("🔧 Setting up LoRA...")
         
-        lora_config = LoraConfig(
-            task_type=TaskType.CAUSAL_LM,
-            r=config.lora.r,
-            lora_alpha=config.lora.alpha,
-            lora_dropout=config.lora.dropout,
-            target_modules=config.lora.target_modules,
-            bias=config.lora.bias,
-        )
-        
-        model = get_peft_model(model, lora_config)
-        model.print_trainable_parameters()
-        
-        # Explicitly enable gradients for LoRA parameters
-        trainable_count = 0
-        for name, param in model.named_parameters():
-            if param.requires_grad:
-                trainable_count += 1
-                if trainable_count <= 5:  # Log first 5 only
-                    logger.info(f"✅ Trainable parameter: {name}")
-        
-        logger.info(f"📊 Total trainable parameters: {trainable_count}")
-        
-        # Force enable training mode and ensure LoRA is active
-        model.train()
-        
-        # Double-check LoRA is working
-        if hasattr(model, 'peft_config'):
-            logger.info("✅ PEFT/LoRA is active")
-        
-        # Force gradients on
-        for name, param in model.named_parameters():
-            if 'lora' in name.lower() or 'adapters' in name.lower():
-                param.requires_grad_(True)
-                logger.debug(f"🔧 Forced gradients for LoRA param: {name}")
-        
-        return model
+        try:
+            from peft import get_peft_model, LoraConfig, TaskType
+            
+            # Check if bitsandbytes is available
+            try:
+                import bitsandbytes
+                logger.info("✅ Bitsandbytes available for quantization")
+                use_quantization = True
+            except ImportError:
+                logger.info("⚠️ Bitsandbytes not available, using standard LoRA")
+                use_quantization = False
+            
+            # Simple LoRA setup without quantization
+            lora_config = LoraConfig(
+                task_type=TaskType.CAUSAL_LM,
+                inference_mode=False,
+                r=config.lora.r,
+                lora_alpha=config.lora.alpha,
+                lora_dropout=config.lora.dropout,
+                target_modules=config.lora.target_modules or ["q_proj", "v_proj"],
+                bias=config.lora.bias,
+            )
+            
+            model = get_peft_model(model, lora_config)
+            
+            # Print trainable parameters
+            trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
+            total_params = sum(p.numel() for p in model.parameters())
+            logger.info(f"🎯 Trainable parameters: {trainable_params:,} ({100 * trainable_params / total_params:.2f}%)")
+            
+            return model
+            
+        except Exception as e:
+            logger.warning(f"⚠️ LoRA setup failed: {e}")
+            logger.info("🔄 Falling back to full model training")
+            return model
     
     @staticmethod
     def freeze_parameters(model: nn.Module, config: TrainingConfig) -> None:
-        """Freeze model parameters according to configuration."""
+        """Freeze specific parameters based on configuration."""
         if config.train_projection_only:
             # Freeze everything except projection layers
             for name, param in model.named_parameters():
-                if "projector" not in name.lower() and "projection" not in name.lower():
+                if "projection" not in name.lower():
                     param.requires_grad = False
-                    
-        # Unfreeze specific layers by patterns
-        for pattern in config.unfreeze_layers_patterns:
+            logger.info("🧊 Frozen all parameters except projection layers")
+            
+        elif config.unfreeze_layers_patterns:
+            # Freeze all parameters first
+            for param in model.parameters():
+                param.requires_grad = False
+            
+            # Unfreeze specific patterns
             for name, param in model.named_parameters():
-                if pattern in name:
-                    param.requires_grad = True
-                    logger.info(f"🔓 Unfrozen layer: {name}")
-        
-        # Log trainable parameters
-        trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
-        total_params = sum(p.numel() for p in model.parameters())
-        logger.info(f"🎯 Trainable params: {trainable_params:,} / {total_params:,} ({100 * trainable_params / total_params:.2f}%)")
-        
-        # Ensure we have at least some trainable parameters
-        if trainable_params == 0:
-            logger.warning("⚠️ No trainable parameters found! This will cause training errors.")
-            # Force enable some parameters for LoRA
-            if hasattr(model, 'base_model'):
-                for name, param in model.base_model.named_parameters():
-                    if 'lora' in name.lower():
+                for pattern in config.unfreeze_layers_patterns:
+                    if pattern in name:
                         param.requires_grad = True
                         break
+            
+            unfrozen_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
+            total_params = sum(p.numel() for p in model.parameters())
+            logger.info(f"🔓 Unfrozen {unfrozen_params:,} parameters ({100 * unfrozen_params / total_params:.2f}%)")
 
 
 def load_model(config: TrainingConfig) -> nn.Module:
-    """
-    Load model according to configuration.
-    
-    Simple approach like align-anything - use HF models directly.
-    """
+    """Main function to load model based on configuration."""
     logger.info(f"🚀 Creating model type: {config.model_type}")
     
-    if config.model_type == "multimodal":
-        from .multimodal import MultimodalModel
-        return MultimodalModel.from_config(config)
-    
-    elif config.model_type == "any2any":
-        from .any2any import AnyToAnyModel  
-        return AnyToAnyModel.from_config(config)
-    
-    elif config.model_type == "standard" or config.model_type == "auto":
-        # Standard HuggingFace model loading
+    if config.model_type == "standard":
         logger.info("📚 Loading standard HuggingFace model...")
+        
+        # Load base model
         model = ModelFactory.load_base_model(config)
         
-        # Set up PEFT
-        model = ModelFactory.setup_peft(model, config)
+        # Setup PEFT if requested
+        if config.use_peft:
+            model = ModelFactory.setup_peft(model, config)
         
-        # Freeze parameters
+        # Apply freezing if needed
         ModelFactory.freeze_parameters(model, config)
         
         return model
-    
+        
+    elif config.model_type == "multimodal":
+        logger.info("🖼️ Loading multimodal model...")
+        return MultimodalModel.from_config(config)
+        
+    elif config.model_type == "any2any":
+        logger.info("🔄 Loading any-to-any model...")
+        return AnyToAnyModel.from_config(config)
+        
     else:
-        # Fallback for unknown types - treat as standard
-        logger.warning(f"⚠️ Unknown model type '{config.model_type}', treating as standard")
-        model = ModelFactory.load_base_model(config)
-        
-        # Set up PEFT
-        model = ModelFactory.setup_peft(model, config)
-        
-        # Freeze parameters
-        ModelFactory.freeze_parameters(model, config)
-        
-        return model 
+        raise ValueError(f"Unknown model type: {config.model_type}") 

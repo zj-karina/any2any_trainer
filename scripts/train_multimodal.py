@@ -1,31 +1,27 @@
 #!/usr/bin/env python3
 """
-Script for training multimodal models.
-
-Supports various architectures (LLaVA-style, BLIP-style, etc.)
+Simple training script for any2any multimodal models.
 """
 
-import os
 import sys
+import os
 import argparse
-from pathlib import Path
-from typing import Optional
-
+import logging
 import torch
-from accelerate import Accelerator
-from transformers import set_seed
+from pathlib import Path
 
-# Add src to PATH
-sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
+# Add project root to path
+project_root = Path(__file__).parent.parent
+sys.path.insert(0, str(project_root / "src"))
 
-from any2any_trainer.utils import ConfigManager, setup_logging, get_logger
-from any2any_trainer.models import load_model
-from any2any_trainer.data import load_dataset, MultimodalCollator
-from any2any_trainer.training import MultimodalTrainer
-
+from any2any_trainer.utils.config import ConfigManager, TrainingConfig
+from any2any_trainer.utils.logging import setup_logging, get_logger
+from any2any_trainer.models.factory import load_model
+from any2any_trainer.data.dataset import load_dataset
+from any2any_trainer.data.collator import MultimodalCollator
+from any2any_trainer.training.trainer import SimpleTrainer
 
 def parse_args():
-    """Parse command line arguments."""
     parser = argparse.ArgumentParser(description="Train multimodal models")
     parser.add_argument(
         "config_path",
@@ -33,132 +29,95 @@ def parse_args():
         help="Path to YAML configuration file"
     )
     parser.add_argument(
-        "--local_rank",
-        type=int,
-        default=-1,
-        help="Local rank for distributed training"
-    )
-    parser.add_argument(
-        "--debug",
+        "--dry-run",
         action="store_true",
-        help="Debug mode"
+        help="Only test model loading and setup without training"
     )
     return parser.parse_args()
 
-
 def main():
-    """Main function."""
     args = parse_args()
     
     # Setup logging
-    setup_logging(
-        level="DEBUG" if args.debug else "INFO",
-        log_file=None,
-        rich_console=True
-    )
+    setup_logging(level="INFO", rich_console=True)
     logger = get_logger(__name__)
     
     logger.info("🚀 Starting multimodal model training...")
     
-    # Load configuration
+    # Load and validate configuration
     try:
         config = ConfigManager.load_config(args.config_path)
         logger.info(f"✅ Configuration loaded from {args.config_path}")
-    except Exception as e:
-        logger.error(f"❌ Error loading configuration: {e}")
-        return 1
-    
-    # Validate configuration
-    try:
+        
+        # Validate configuration
         ConfigManager.validate_config(config)
+        print("✅ Configuration passed validation")
+        logger.info("✅ Configuration passed validation")
+        
     except Exception as e:
-        logger.error(f"❌ Configuration validation error: {e}")
+        logger.error(f"❌ Configuration error: {e}")
         return 1
     
-    # Set seed
-    if hasattr(config, 'seed'):
-        set_seed(config.seed)
-        logger.info(f"🌱 Seed set: {config.seed}")
+    # Check device
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    logger.info(f"🖥️ Device: {device}")
+    if torch.cuda.is_available():
+        logger.info(f"🔢 Number of GPUs: {torch.cuda.device_count()}")
     
-    # Initialize Accelerator
-    accelerator = Accelerator()
-    
-    # Log device information
-    logger.info(f"🖥️  Device: {accelerator.device}")
-    logger.info(f"🔢 Number of processes: {accelerator.num_processes}")
-    
-    # Load model
     try:
+        # Load model
         logger.info("📥 Loading model...")
         model = load_model(config)
         logger.info("✅ Model loaded successfully")
         
-        # Load tokenizer for data processing
+        # Load tokenizer 
         from any2any_trainer.models.factory import ModelFactory
         tokenizer = ModelFactory.load_tokenizer(config)
         logger.info("✅ Tokenizer loaded successfully")
-    except Exception as e:
-        logger.error(f"❌ Model loading error: {e}")
-        return 1
-    
-    # Load data
-    try:
-        logger.info("📊 Loading data...")
+        
+        # Load datasets
+        logger.info("📊 Loading datasets...")
         train_dataset, eval_dataset = load_dataset(config)
-        logger.info(f"✅ Loaded {len(train_dataset)} training examples")
+        logger.info(f"✅ Train dataset: {len(train_dataset)} examples")
         if eval_dataset:
-            logger.info(f"✅ Loaded {len(eval_dataset)} validation examples")
-    except Exception as e:
-        logger.error(f"❌ Data loading error: {e}")
-        return 1
-    
-    # Create data collator
-    try:
-        data_collator = MultimodalCollator(config, tokenizer=tokenizer)
-        logger.info("✅ Data collator created")
-    except Exception as e:
-        logger.error(f"❌ Data collator creation error: {e}")
-        return 1
-    
-    # Create trainer
-    try:
-        logger.info("🏋️ Creating trainer...")
-        trainer = MultimodalTrainer(
-            model=model,
-            config=config,
-            train_dataset=train_dataset,
-            eval_dataset=eval_dataset,
-            data_collator=data_collator,
-            accelerator=accelerator
+            logger.info(f"✅ Eval dataset: {len(eval_dataset)} examples")
+        
+        if args.dry_run:
+            logger.info("🏁 Dry run completed successfully - stopping before training")
+            return 0
+        
+        # Create data collator
+        collator = MultimodalCollator(config, tokenizer)
+        
+        # Create data loaders
+        from torch.utils.data import DataLoader
+        train_dataloader = DataLoader(
+            train_dataset,
+            batch_size=config.per_device_train_batch_size,
+            shuffle=True,
+            collate_fn=collator,
+            num_workers=0  # Set to 0 to avoid multiprocessing issues
         )
-        logger.info("✅ Trainer created successfully")
-    except Exception as e:
-        logger.error(f"❌ Trainer creation error: {e}")
-        return 1
-    
-    # Start training
-    try:
+        
+        # Use SimpleTrainer
+        trainer = SimpleTrainer(model, tokenizer, config)
+        
+        # Train model
         logger.info("🎯 Starting training...")
-        trainer.train()
+        trainer.train(train_dataloader, config.num_train_epochs)
+        
+        # Save model
+        logger.info(f"💾 Saving model to {config.output_dir}")
+        trainer.save_model(config.output_dir)
+        
         logger.info("🎉 Training completed successfully!")
+        return 0
+        
     except Exception as e:
-        logger.error(f"❌ Training error: {e}")
+        logger.error(f"❌ Training failed: {e}")
+        import traceback
+        logger.error(traceback.format_exc())
         return 1
-    
-    # Save model
-    try:
-        if accelerator.is_main_process:
-            logger.info("💾 Saving final model...")
-            output_dir = Path(config.output_dir) / "final_model"
-            trainer.save_model(output_dir)
-            logger.info(f"✅ Model saved to {output_dir}")
-    except Exception as e:
-        logger.error(f"❌ Model saving error: {e}")
-        return 1
-    
-    logger.info("🏁 Training process completed!")
-    return 0
-
 
 if __name__ == "__main__":
-    sys.exit(main()) 
+    exit(main()) 
