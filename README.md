@@ -7,6 +7,7 @@
 - [📦 Installation](#-installation) 
 - [🚀 Quick Start](#-quick-start)
 - [📝 Configuration Examples](#-example-yaml-configurations)
+- [🧠 Smart Configuration](#-smart-configuration)
 - [📚 Documentation](#-documentation)
 - [🎯 Roadmap](#-development-roadmap)
 
@@ -46,6 +47,34 @@ Simply define a YAML configuration with HF TrainingArguments parameters and spec
 - **Unified:** Single model for all modalities (like AnyGPT)
 - **Projection-based:** LLM + projection adapters (like LLaVA)
 
+## 🧠 Smart Configuration
+
+### 🚀 NEW: Automatic Model Type Detection
+
+Больше **НЕ НУЖНО** указывать `model_type` в конфигурации! Система автоматически определит тип модели на основе указанных модальностей:
+
+```yaml
+# 🤖 Автоматически определится как "standard"
+modalities:
+  input: ["text"]
+  output: ["text"]
+
+# 🤖 Автоматически определится как "multimodal"  
+modalities:
+  input: ["image", "text"]
+  output: ["text"]
+
+# 🤖 Автоматически определится как "any2any"
+modalities:
+  input: ["text", "image", "audio"]
+  output: ["text", "image", "audio"]
+```
+
+### Логика автоопределения:
+- **`standard`**: `text → text` или одинаковые модальности (например, `image → image`)
+- **`multimodal`**: Несколько входных модальностей с выходом в текст
+- **`any2any`**: Сложные комбинации множественных модальностей
+
 ## 🚀 How to Use
 
 ### 📦 Installation
@@ -80,9 +109,11 @@ poetry run python test_installation.py  # Confirms: Model loading, LoRA, CUDA, f
 
 ### Training Configuration Example
 ```bash
-# Create simple config
+# Create simple config - model_type автоопределится как "standard"!
 echo 'model_name_or_path: "gpt2"
-model_type: "standard"
+modalities:
+  input: ["text"]
+  output: ["text"]
 dataset: ["wikitext", "wikitext-2-raw-v1"]
 output_dir: "./my_first_model"
 per_device_train_batch_size: 1
@@ -112,8 +143,11 @@ poetry run python scripts/train_multimodal.py configs/sft/llava_training.yaml
 #### Minimal Configuration
 
 ```yaml
-# Just specify any model from HF Hub!
+# Just specify any model from HF Hub! model_type автоопределится как "standard"
 model_name_or_path: "Qwen/Qwen2.5-7B-Instruct"
+modalities:
+  input: ["text"]
+  output: ["text"]
 dataset: ["tatsu-lab/alpaca"]
 use_peft: true
 lora:
@@ -134,8 +168,7 @@ python scripts/train_multimodal.py my_config.yaml
 ```yaml
 # configs/sft/llava_style_training.yaml
 model_name_or_path: "microsoft/DialoGPT-medium"
-vision_encoder: "openai/clip-vit-base-patch32"
-projection_type: "mlp"  # mlp, linear, transformer
+# model_type автоматически определится как "multimodal"!
 
 # IMPORTANT: Convert LLaVA dataset first!
 # Use: python scripts/convert_llava_to_conversations.py llava_data.jsonl converted_data.jsonl
@@ -145,6 +178,14 @@ dataset:
 modalities:
   input: ["image", "text"]
   output: ["text"]
+
+encoders:
+  image:
+    model: "openai/clip-vit-base-patch32"
+    freeze: true
+
+projection:
+  type: "mlp"  # mlp, linear, transformer
 
 per_device_train_batch_size: 2
 per_device_eval_batch_size: 2
@@ -176,28 +217,35 @@ image_field: "image"
 ```yaml
 # configs/any2any/anygpt_style_training.yaml
 model_name_or_path: "Qwen/Qwen2.5-7B-Instruct"
+# model_type автоматически определится как "any2any"!
+
+modalities:
+  input: ["text", "image", "audio", "video"]
+  output: ["text", "image", "audio"]
 
 # Encoders for each modality
 encoders:
-  text:
-    model: "Qwen/Qwen2.5-7B-Instruct"
-    freeze: false
   image:
     model: "openai/clip-vit-large-patch14"
     freeze: true
+    tokenizer_type: "discrete"
   audio:
     model: "openai/whisper-base"
     freeze: true
+    tokenizer_type: "discrete"
   video:
     model: "microsoft/videoMAE-base"
     freeze: true
+    tokenizer_type: "discrete"
 
-# Modality tokenization
-tokenizers:
-  image: "discrete"  # discrete tokens
-  audio: "discrete"
-  video: "discrete"
-  text: "continuous"  # regular text tokenization
+# Decoders for output modalities
+decoders:
+  image:
+    model: "stabilityai/stable-diffusion-2-1"
+    freeze: false
+  audio:
+    model: "microsoft/speecht5_tts"
+    freeze: false
 
 # Special tokens for modalities
 special_tokens:
@@ -210,10 +258,6 @@ special_tokens:
 
 dataset:
   - "custom/multimodal_conversations"
-
-modalities:
-  input: ["text", "image", "audio", "video"]
-  output: ["text", "image", "audio"]
 
 per_device_train_batch_size: 1
 gradient_accumulation_steps: 16

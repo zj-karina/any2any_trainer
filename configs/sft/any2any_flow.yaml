@@ -1,0 +1,79 @@
+# 🔄 Any2Any модель с автоопределением model_type
+# Поддержка множественных модальностей на входе и выходе
+
+# === ОСНОВНЫЕ ПАРАМЕТРЫ ===
+model_name_or_path: "Qwen/Qwen2.5-7B-Instruct"
+
+# Указание модальностей - автоматически определит model_type: any2any
+modalities:
+  input: ["text", "image", "audio"]
+  output: ["text", "image", "audio"]
+
+# === ЭНКОДЕРЫ ДЛЯ ВСЕХ МОДАЛЬНОСТЕЙ ===
+encoders:
+  image:
+    model: "openai/clip-vit-large-patch14"
+    freeze: true
+    tokenizer_type: "discrete"
+  audio:
+    model: "openai/whisper-base"
+    freeze: true
+    tokenizer_type: "discrete"
+
+# === ДЕКОДЕРЫ ДЛЯ ВЫХОДНЫХ МОДАЛЬНОСТЕЙ ===
+decoders:
+  image:
+    model: "stabilityai/stable-diffusion-2-1"
+    freeze: false
+  audio:
+    model: "microsoft/speecht5_tts" 
+    freeze: false
+
+# === ТОКЕНИЗАЦИЯ МОДАЛЬНОСТЕЙ ===
+# Дискретная токенизация для non-text модальностей
+special_tokens:
+  image_start: "<img>"
+  image_end: "</img>"
+  audio_start: "<aud>"
+  audio_end: "</aud>"
+
+# === ДАТАСЕТ ===
+dataset:
+  - "custom/multimodal_conversations"
+
+conversation_field: "conversations"
+max_seq_length: 4096
+
+# === ПАРАМЕТРЫ ОБУЧЕНИЯ ===
+output_dir: "./output/any2any_auto_model"
+per_device_train_batch_size: 1
+gradient_accumulation_steps: 16
+num_train_epochs: 2
+learning_rate: 1e-5
+warmup_steps: 1000
+
+# === LoRA ===
+use_peft: true
+lora:
+  r: 128
+  alpha: 256
+  dropout: 0.1
+  target_modules:
+    - "q_proj"
+    - "v_proj"
+    - "k_proj"
+    - "o_proj"
+  bias: "none"
+
+# === ОПТИМИЗАЦИЯ ===
+gradient_checkpointing: true
+bf16: true
+dataloader_num_workers: 2
+remove_unused_columns: false
+
+# === ЛОГИРОВАНИЕ ===
+logging_steps: 100
+save_steps: 2000
+eval_steps: 2000
+report_to: "none"
+run_name: "any2any_auto_training" 

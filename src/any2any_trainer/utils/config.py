@@ -41,12 +41,45 @@ class LoRAConfig(BaseModel):
     bias: str = "none"
 
 
+def auto_detect_model_type(modalities: Dict[str, List[str]]) -> str:
+    """
+    Автоматически определяет model_type на основе modальностей.
+    
+    Логика:
+    - {"input": ["text"], "output": ["text"]} -> 'standard' (обычная LLM)
+    - одна модальность (не text) -> 'standard' (например, image | image)
+    - мультимодальность с text output -> 'multimodal' 
+    - сложные any2any случаи -> 'any2any'
+    """
+    input_modalities = set(modalities.get('input', []))
+    output_modalities = set(modalities.get('output', []))
+    
+    # text -> text: standard LLM
+    if input_modalities == {'text'} and output_modalities == {'text'}:
+        return 'standard'
+    
+    # Одна немультимодальная модальность -> standard  
+    if len(input_modalities) == 1 and len(output_modalities) == 1:
+        input_mod = list(input_modalities)[0]
+        output_mod = list(output_modalities)[0]
+        if input_mod == output_mod and input_mod != 'text':
+            return 'standard'  # например image -> image
+    
+    # Простые мультимодальные случаи -> multimodal
+    # например: ["image", "text"] -> ["text"], ["image"] -> ["text"]
+    if 'text' in output_modalities and len(output_modalities) == 1:
+        return 'multimodal'
+    
+    # Сложные any2any случаи -> any2any
+    return 'any2any'
+
+
 class TrainingConfig(BaseModel):
     """Main configuration for training."""
     
     # Basic model parameters
     model_name_or_path: str
-    model_type: str = "multimodal"  # multimodal, any2any, unified, standard
+    model_type: Optional[str] = None  # автоопределение на основе modalities
     
     # Modality configuration
     modalities: Dict[str, List[str]] = {"input": ["text"], "output": ["text"]}
@@ -112,8 +145,20 @@ class TrainingConfig(BaseModel):
     generate_eval_examples: bool = False
     max_new_tokens: int = 256
     
+    def __init__(self, **data):
+        super().__init__(**data)
+        self._auto_detect_model_type()
+    
+    def _auto_detect_model_type(self):
+        """Автоматически определяет model_type на основе modalities."""
+        if not self.model_type:
+            self.model_type = auto_detect_model_type(self.modalities)
+            print(f"🤖 Автоопределен model_type '{self.model_type}' на основе modalities: {self.modalities}")
+    
     @validator('model_type')
     def validate_model_type(cls, v):
+        if v is None:
+            return v  # Будет автоопределен в __init__
         valid_types = ['standard', 'multimodal', 'any2any', 'unified']
         if v not in valid_types:
             raise ValueError(f"model_type must be one of: {valid_types}, got {v}")

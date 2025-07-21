@@ -1,0 +1,49 @@
+# 🚀 Простая конфигурация с автоопределением model_type
+# Теперь не нужно указывать model_type - он определится автоматически!
+
+# === ОСНОВНЫЕ ПАРАМЕТРЫ ===
+model_name_or_path: "Qwen/Qwen2.5-1.5B-Instruct"
+
+# Простое указание модальностей - автоматически определит model_type: standard
+modalities:
+  input: ["text"]
+  output: ["text"]
+
+# === ДАТАСЕТ ===
+dataset:
+  - "HuggingFaceH4/ultrachat_200k"
+
+conversation_field: "messages"
+max_seq_length: 2048
+
+# === ПАРАМЕТРЫ ОБУЧЕНИЯ ===
+output_dir: "./output/simple_text_model"
+per_device_train_batch_size: 4
+per_device_eval_batch_size: 4
+gradient_accumulation_steps: 2
+num_train_epochs: 1
+learning_rate: 5e-5
+warmup_steps: 100
+logging_steps: 10
+save_steps: 500
+
+# === LoRA ===
+use_peft: true
+lora:
+  r: 32
+  alpha: 64
+  dropout: 0.1
+  target_modules:
+    - "q_proj"
+    - "v_proj"
+    - "k_proj"
+    - "o_proj"
+  bias: "none"
+
+# === ОПТИМИЗАЦИЯ ===
+bf16: true
+dataloader_num_workers: 4
+remove_unused_columns: false
+report_to: "none"
+run_name: "simple_text_auto"
+seed: 42 
