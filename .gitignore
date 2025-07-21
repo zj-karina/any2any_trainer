@@ -160,7 +160,6 @@ clearml/
 *.ckpt
 
 # Data files
-data/
 datasets/
 *.jsonl
 *.csv
