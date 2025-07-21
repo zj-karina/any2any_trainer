@@ -2,7 +2,7 @@
 # LLaVA-style: изображение + текст -> текст
 
 # === ОСНОВНЫЕ ПАРАМЕТРЫ ===
-model_name_or_path: "microsoft/DialoGPT-medium"
+model_name_or_path: "HuggingFaceH4/zephyr-7b-beta"  # Современная модель с safetensors поддержкой
 
 # Указание модальностей - автоматически определит model_type: multimodal
 modalities:
@@ -25,8 +25,8 @@ projection:
 
 # === ДАТАСЕТ ===
 # Требуется конвертированный LLaVA датасет
-dataset: ["llava_conversations.jsonl"]
-conversation_field: "conversations"
+dataset: ["hf_multimodal_dataset"]  # Используем стандартный HuggingFace датасет
+conversation_field: "conversations"  # Наш датасет использует "conversations"
 
 # === ПАРАМЕТРЫ ОБУЧЕНИЯ ===
 output_dir: "./output/multimodal_auto_model"
@@ -43,7 +43,7 @@ lora:
   r: 16
   alpha: 32
   dropout: 0.1
-  target_modules: ["c_attn", "c_proj"]
+  target_modules: ["q_proj", "v_proj", "k_proj", "o_proj"]  # Для современных моделей
   bias: "none"
 
 # === КОМПОНЕНТЫ ===

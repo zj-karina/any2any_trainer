@@ -89,18 +89,23 @@ class MultimodalModel(nn.Module):
         vision_encoder = ModelFactory.load_vision_encoder(vision_config.model)
         
         # Create projection layer
-        # Handle different vision encoder configurations
-        vision_config = vision_encoder["config"]
-        if hasattr(vision_config, 'hidden_size'):
-            vision_hidden_size = vision_config.hidden_size
-        elif hasattr(vision_config, 'vision_config') and hasattr(vision_config.vision_config, 'hidden_size'):
-            vision_hidden_size = vision_config.vision_config.hidden_size
-        elif hasattr(vision_config, 'projection_dim'):
-            vision_hidden_size = vision_config.projection_dim
-        else:
-            # Fallback for CLIP and other models
-            vision_hidden_size = 768  # Default for CLIP base
-            logger.warning(f"⚠️ Could not determine vision hidden size, using default: {vision_hidden_size}")
+        # Get vision hidden size from returned dict
+        vision_hidden_size = vision_encoder.get("hidden_size")
+        if vision_hidden_size is None:
+            # Fallback: get from model config
+            vision_model = vision_encoder["model"]
+            vision_config = vision_model.config
+            
+            if hasattr(vision_config, 'hidden_size'):
+                vision_hidden_size = vision_config.hidden_size
+            elif hasattr(vision_config, 'vision_config') and hasattr(vision_config.vision_config, 'hidden_size'):
+                vision_hidden_size = vision_config.vision_config.hidden_size
+            elif hasattr(vision_config, 'projection_dim'):
+                vision_hidden_size = vision_config.projection_dim
+            else:
+                # Fallback for CLIP and other models
+                vision_hidden_size = 768  # Default for CLIP base
+                logger.warning(f"⚠️ Could not determine vision hidden size, using default: {vision_hidden_size}")
         
         text_hidden_size = language_model.config.hidden_size
         

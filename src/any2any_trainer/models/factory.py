@@ -34,7 +34,8 @@ class ModelFactory:
             config.model_name_or_path,
             torch_dtype=torch.bfloat16 if config.bf16 else torch.float32,
             device_map="auto",  # Automatically place on GPU
-            trust_remote_code=True
+            trust_remote_code=True,
+            use_safetensors=True  # Принудительно используем safetensors для безопасности
         )
         
         if config.gradient_checkpointing:
