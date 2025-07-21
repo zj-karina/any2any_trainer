@@ -57,9 +57,11 @@ class AnyToAnyModel(nn.Module):
         encoders = {}
         for modality, encoder_config in config.encoders.items():
             if modality == "image":
-                encoders[modality] = ModelFactory.load_vision_encoder(encoder_config.model)
+                encoder_dict = ModelFactory.load_vision_encoder(encoder_config.model)
+                encoders[modality] = encoder_dict["model"]  # Extract actual model
             elif modality == "audio":
-                encoders[modality] = ModelFactory.load_audio_encoder(encoder_config.model)
+                encoder_dict = ModelFactory.load_audio_encoder(encoder_config.model)
+                encoders[modality] = encoder_dict["model"]  # Extract actual model
             # Add support for other modalities
         
         # Load decoders (if available)
@@ -79,21 +81,22 @@ class AnyToAnyModel(nn.Module):
         )
         
         # Set up PEFT
-        model.language_model = ModelFactory.setup_peft(model.language_model, config)
+        model.language_model = ModelFactory.setup_lora(model.language_model, config)
         
         return model
     
-    def forward(self, batch: Dict[str, Any]) -> Dict[str, torch.Tensor]:
+    def forward(self, input_ids=None, attention_mask=None, labels=None, **kwargs):
         """Forward pass for Any2Any model."""
         
-        # TODO: Forward pass implementation
+        # TODO: Forward pass implementation  
         # Here will be logic for processing different modalities
         
         outputs = self.language_model(
-            input_ids=batch.get("input_ids"),
-            attention_mask=batch.get("attention_mask"),
-            labels=batch.get("labels"),
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            labels=labels,
             return_dict=True,
+            **kwargs
         )
         
         return outputs

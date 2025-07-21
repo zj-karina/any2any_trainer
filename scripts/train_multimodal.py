@@ -16,6 +16,13 @@ sys.path.insert(0, str(project_root / "src"))
 
 from any2any_trainer.utils.config import ConfigManager, TrainingConfig
 from any2any_trainer.utils.logging import setup_logging, get_logger
+# Временное решение проблемы с импортом factory
+import sys
+import os
+from pathlib import Path
+project_root = Path(__file__).parent.parent.parent
+sys.path.insert(0, str(project_root / "src"))
+
 from any2any_trainer.models.factory import load_model
 from any2any_trainer.data.dataset import load_dataset
 from any2any_trainer.data.collator import MultimodalCollator

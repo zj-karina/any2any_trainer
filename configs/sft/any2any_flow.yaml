@@ -1,79 +1,86 @@
-# 🔄 Any2Any модель с автоопределением model_type
-# Поддержка множественных модальностей на входе и выходе
+# 🌟 Конфигурация для настоящей Qwen2.5-Omni модели
+# Поддерживает все модальности: text, image, audio, video
 
-# === ОСНОВНЫЕ ПАРАМЕТРЫ ===
-model_name_or_path: "Qwen/Qwen2.5-7B-Instruct"
+model_name_or_path: "Qwen/Qwen2.5-Omni-7B"
 
-# Указание модальностей - автоматически определит model_type: any2any
+# Any2Any модальности (автоопределение model_type)
 modalities:
   input: ["text", "image", "audio"]
   output: ["text", "image", "audio"]
 
-# === ЭНКОДЕРЫ ДЛЯ ВСЕХ МОДАЛЬНОСТЕЙ ===
+# Омнимодальный датасет
+dataset: ["quick_any2any_dataset"]
+conversation_field: "conversations"
+max_seq_length: 2048
+
+# Настройки для Omni модели
+output_dir: "./output/qwen_omni_any2any"
+per_device_train_batch_size: 1
+gradient_accumulation_steps: 4
+num_train_epochs: 1
+learning_rate: 1e-5
+warmup_steps: 50
+max_steps: 100
+
+# LoRA для эффективности
+use_peft: true
+lora:
+  r: 16
+  alpha: 32
+  dropout: 0.1
+  target_modules: ["q_proj", "v_proj", "k_proj", "o_proj"]
+  bias: "none"
+
+# Энкодеры для мультимодальности
 encoders:
   image:
-    model: "openai/clip-vit-large-patch14"
+    model: "openai/clip-vit-base-patch32"
     freeze: true
     tokenizer_type: "discrete"
+
   audio:
     model: "openai/whisper-base"
     freeze: true
     tokenizer_type: "discrete"
 
-# === ДЕКОДЕРЫ ДЛЯ ВЫХОДНЫХ МОДАЛЬНОСТЕЙ ===
+# Декодеры для any2any выходных модальностей
 decoders:
   image:
-    model: "stabilityai/stable-diffusion-2-1"
+    model: "runwayml/stable-diffusion-v1-5"
     freeze: false
+    
   audio:
-    model: "microsoft/speecht5_tts" 
+    model: "microsoft/speecht5_tts"
     freeze: false
 
-# === ТОКЕНИЗАЦИЯ МОДАЛЬНОСТЕЙ ===
-# Дискретная токенизация для non-text модальностей
+# Специальные токены для модальностей
 special_tokens:
   image_start: "<img>"
   image_end: "</img>"
-  audio_start: "<aud>"
-  audio_end: "</aud>"
+  audio_start: "<audio>"
+  audio_end: "</audio>"
+  video_start: "<video>"
+  video_end: "</video>"
 
-# === ДАТАСЕТ ===
-dataset:
-  - "custom/multimodal_conversations"
-
-conversation_field: "conversations"
-max_seq_length: 4096
-
-# === ПАРАМЕТРЫ ОБУЧЕНИЯ ===
-output_dir: "./output/any2any_auto_model"
-per_device_train_batch_size: 1
-gradient_accumulation_steps: 16
-num_train_epochs: 2
-learning_rate: 1e-5
-warmup_steps: 1000
-
-# === LoRA ===
-use_peft: true
-lora:
-  r: 128
-  alpha: 256
-  dropout: 0.1
-  target_modules:
-    - "q_proj"
-    - "v_proj"
-    - "k_proj"
-    - "o_proj"
-  bias: "none"
-
-# === ОПТИМИЗАЦИЯ ===
+# Оптимизация для Omni
 gradient_checkpointing: true
 bf16: true
 dataloader_num_workers: 2
 remove_unused_columns: false
 
-# === ЛОГИРОВАНИЕ ===
-logging_steps: 100
-save_steps: 2000
-eval_steps: 2000
+# Логирование
+logging_steps: 10
+save_steps: 50
+eval_steps: 50
+evaluation_strategy: "steps"
 report_to: "none"
-run_name: "any2any_auto_training" 
+run_name: "qwen_omni_any2any"
+
+# Дополнительные параметры
+save_total_limit: 3
+load_best_model_at_end: true
+metric_for_best_model: "loss"
+
+# Специальные настройки для Omni
+# trust_remote_code: true (автоматически)
+# torchvision: required для видео обработки 

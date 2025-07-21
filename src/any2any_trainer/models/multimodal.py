@@ -55,14 +55,14 @@ class MultimodalModel(nn.Module):
         super().__init__()
         
         self.language_model = language_model
-        self.vision_encoder = vision_encoder["model"]
-        self.vision_processor = vision_encoder["processor"]
+        self.vision_encoder = vision_encoder["model"] if isinstance(vision_encoder, dict) else vision_encoder
+        self.vision_processor = vision_encoder["processor"] if isinstance(vision_encoder, dict) else None
         self.projection = projection_layer
         self.tokenizer = tokenizer
         self.config = config
         
-        # Freeze components according to configuration
-        if config.freeze_vision_encoder:
+        # Freeze components according to configuration (if they exist)
+        if config.freeze_vision_encoder and self.vision_encoder:
             for param in self.vision_encoder.parameters():
                 param.requires_grad = False
                 
@@ -84,20 +84,26 @@ class MultimodalModel(nn.Module):
         # Load tokenizer
         tokenizer = ModelFactory.load_tokenizer(config)
         
-        # Load vision encoder
-        vision_config = list(config.encoders.values())[0]  # Take first vision encoder
-        vision_encoder = ModelFactory.load_vision_encoder(vision_config.model)
+        # Load vision encoder (if any)
+        vision_encoder = None
+        vision_hidden_size = None  # Initialize for all cases
         
-        # Create projection layer
-        # Get vision hidden size from returned dict
-        vision_hidden_size = vision_encoder.get("hidden_size")
-        if vision_hidden_size is None:
-            # Fallback: get from model config
-            vision_model = vision_encoder["model"]
-            vision_config = vision_model.config
-            
-            if hasattr(vision_config, 'hidden_size'):
-                vision_hidden_size = vision_config.hidden_size
+        if config.encoders and len(config.encoders) > 0:
+            vision_config = list(config.encoders.values())[0]  # Take first encoder
+            vision_encoder = ModelFactory.load_vision_encoder(vision_config.model)
+        
+        # Create projection layer (if vision encoder exists)
+        projection = None
+        if vision_encoder:
+            # Get vision hidden size from returned dict
+            vision_hidden_size = vision_encoder.get("hidden_size")
+            if vision_hidden_size is None:
+                # Fallback: get from model config
+                vision_model = vision_encoder["model"]
+                vision_config = vision_model.config
+                
+                if hasattr(vision_config, 'hidden_size'):
+                    vision_hidden_size = vision_config.hidden_size
             elif hasattr(vision_config, 'vision_config') and hasattr(vision_config.vision_config, 'hidden_size'):
                 vision_hidden_size = vision_config.vision_config.hidden_size
             elif hasattr(vision_config, 'projection_dim'):
@@ -109,11 +115,14 @@ class MultimodalModel(nn.Module):
         
         text_hidden_size = language_model.config.hidden_size
         
-        projection_layer = ProjectionLayer(
-            vision_hidden_size=vision_hidden_size,
-            text_hidden_size=text_hidden_size,
-            projection_type=config.projection.type
-        )
+        # Create projection layer only if vision encoder exists
+        projection_layer = None
+        if vision_encoder and vision_hidden_size:
+            projection_layer = ProjectionLayer(
+                vision_hidden_size=vision_hidden_size,
+                text_hidden_size=text_hidden_size,
+                projection_type=config.projection.type
+            )
         
         # Create model
         model = cls(
@@ -125,10 +134,9 @@ class MultimodalModel(nn.Module):
         )
         
         # Set up PEFT
-        model.language_model = ModelFactory.setup_peft(model.language_model, config)
+        model.language_model = ModelFactory.setup_lora(model.language_model, config)
         
-        # Freeze parameters
-        ModelFactory.freeze_parameters(model, config)
+        # Freeze parameters (removed freeze_parameters method - handled in individual components)
         
         return model
     
